@@ -10,6 +10,7 @@ Usage example:
         }
     }
 
+    // Video size: 200x100 pixels, FPS: 2
     aw, err := mjpeg.New("test.avi", 200, 100, 2)
     checkErr(err)
 
