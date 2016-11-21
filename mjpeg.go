@@ -13,7 +13,7 @@ Usage example:
     aw, err := mjpeg.New("test.avi", 200, 100, 2)
     checkErr(err)
 
-    // Create a movie from images: 1.jpg, 2.jpg... 10.jpg
+    // Create a movie from images: 1.jpg, 2.jpg, ..., 10.jpg
     for i := 1; i <= 10; i++ {
         data, err := ioutil.ReadFile(fmt.Sprintf("%d.jpg", i))
         checkErr(err)
@@ -35,6 +35,8 @@ import (
 )
 
 var (
+	// ErrTooLarge reports if more frames cannot be added,
+	// else the video file would get corrupted.
 	ErrTooLarge = errors.New("Video file too large!")
 )
 
@@ -297,6 +299,8 @@ func (aw *aviWriter) currentPos() (pos int64) {
 }
 
 // AddFrame implements AviWriter.AddFrame().
+// ErrTooLarge is returned if the vide file is too large and would get corrupted
+// if the given image would be added. The file limit is about 4GB.
 func (aw *aviWriter) AddFrame(jpegData []byte) error {
 	framePos := aw.currentPos()
 	// Pointers in AVI are 32 bit. Do not write beyond that else the whole AVI file will be corrupted (not playable).
