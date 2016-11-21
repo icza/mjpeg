@@ -55,6 +55,9 @@ var (
 	// ErrTooLarge reports if more frames cannot be added,
 	// else the video file would get corrupted.
 	ErrTooLarge = errors.New("Video file too large!")
+
+	// errImproperUse signals improper state (due to a previous error).
+	errImproperState = errors.New("Improper State!")
 )
 
 // AviWriter is an *.avi video writer.
@@ -89,7 +92,7 @@ type aviWriter struct {
 	err error
 
 	// lengthFields contains the file positions of the length fields
-	// that are filled later
+	// that are filled later; used as a stack (LIFO)
 	lengthFields []int64
 
 	// Position of the frames count fields
@@ -146,15 +149,15 @@ func New(aviFile string, width, height, fps int32) (awr AviWriter, err error) {
 		return nil, err
 	}
 
-	wstr, wint32, wint16, wLengthF, finalizeLengthF :=
+	wstr, wint32, wint16, wLenF, finalizeLenF :=
 		aw.writeStr, aw.writeInt32, aw.writeInt16, aw.writeLengthField, aw.finalizeLengthField
 
 	// Write AVI header
 	wstr("RIFF")          // RIFF type
-	wLengthF()            // File length (remaining bytes after this field) (nesting level 0)
+	wLenF()               // File length (remaining bytes after this field) (nesting level 0)
 	wstr("AVI ")          // AVI signature
 	wstr("LIST")          // LIST chunk: data encoding
-	wLengthF()            // Chunk length (nesting level 1)
+	wLenF()               // Chunk length (nesting level 1)
 	wstr("hdrl")          // LIST chunk type
 	wstr("avih")          // avih sub-chunk
 	wint32(0x38)          // Sub-chunk length excluding the first 8 bytes of avih signature and size
@@ -176,7 +179,7 @@ func New(aviFile string, width, height, fps int32) (awr AviWriter, err error) {
 
 	// Write stream information
 	wstr("LIST") // LIST chunk: stream headers
-	wLengthF()   // Chunk size (nesting level 2)
+	wLenF()      // Chunk size (nesting level 2)
 	wstr("strl") // LIST chunk type: stream list
 	wstr("strh") // Stream header
 	wint32(56)   // Length of the strh sub-chunk
@@ -199,7 +202,7 @@ func New(aviFile string, width, height, fps int32) (awr AviWriter, err error) {
 	wint16(0)  //   ..bottom
 	// end of 'strh' chunk, stream format follows
 	wstr("strf")               // stream format chunk
-	wLengthF()                 // Chunk size (nesting level 3)
+	wLenF()                    // Chunk size (nesting level 3)
 	wint32(40)                 // biSize, write header size of BITMAPINFO header structure; applications should use this size to determine which BITMAPINFO header structure is being used, this size includes this biSize field
 	wint32(width)              // biWidth, width in pixels
 	wint32(height)             // biWidth, height in pixels (may be negative for uncompressed video to indicate vertical flip)
@@ -211,10 +214,10 @@ func New(aviFile string, width, height, fps int32) (awr AviWriter, err error) {
 	wint32(0)                  // biYPelsPerMeter, vertical resolution in pixels per meter
 	wint32(0)                  // biClrUsed (color table size; for 8-bit only)
 	wint32(0)                  // biClrImportant, specifies that the first x colors of the color table (0: all the colors are important, or, rather, their relative importance has not been computed)
-	finalizeLengthF()          //'strf' chunk finished (nesting level 3)
+	finalizeLenF()             //'strf' chunk finished (nesting level 3)
 
 	wstr("strn") // Use 'strn' to provide a zero terminated text string describing the stream
-	name := "Recorded with https://github.com/icza/mjpeg" +
+	name := "Created with https://github.com/icza/mjpeg" +
 		" at " + time.Now().Format("2006-01-02 15:04:05 MST")
 	// Name must be 0-terminated and stream name length (the length of the chunk) must be even
 	if len(name)&0x01 == 0 {
@@ -224,11 +227,11 @@ func New(aviFile string, width, height, fps int32) (awr AviWriter, err error) {
 	}
 	wint32(int32(len(name))) // Length of the strn sub-CHUNK (must be even)
 	wstr(name)
-	finalizeLengthF() // LIST 'strl' finished (nesting level 2)
-	finalizeLengthF() // LIST 'hdrl' finished (nesting level 1)
+	finalizeLenF() // LIST 'strl' finished (nesting level 2)
+	finalizeLenF() // LIST 'hdrl' finished (nesting level 1)
 
 	wstr("LIST") // The second LIST chunk, which contains the actual data
-	wLengthF()   // Chunk length (nesting level 1)
+	wLenF()      // Chunk length (nesting level 1)
 	aw.moviPos = aw.currentPos()
 	wstr("movi") // LIST chunk type: 'movi'
 
@@ -281,38 +284,48 @@ func (aw *aviWriter) writeLengthField() {
 		return
 	}
 	pos := aw.currentPos()
-	if aw.err != nil {
-		return
-	}
 	aw.lengthFields = append(aw.lengthFields, pos)
 	aw.writeInt32(0)
 }
 
-/**
- * Finalizes the last length field.
- */
 // finalizeLengthField finalizes the last length field.
 func (aw *aviWriter) finalizeLengthField() {
-	pos := aw.currentPos()
-
-	_, aw.err = aw.avif.Seek(aw.lengthFields[len(aw.lengthFields)-1], 0)
-	aw.lengthFields = aw.lengthFields[:len(aw.lengthFields)-1]
 	if aw.err != nil {
 		return
 	}
+	pos := aw.currentPos()
+	if aw.err != nil {
+		return
+	}
+
+	numLenFs := len(aw.lengthFields)
+	if numLenFs == 0 {
+		aw.err = errImproperState
+		return
+	}
+	aw.seek(aw.lengthFields[numLenFs-1], 0)
+	aw.lengthFields = aw.lengthFields[:numLenFs-1]
 	aw.writeInt32(int32(pos - aw.currentPos() - 4))
 
 	// Seek "back" but align to a 2-byte boundary
 	if pos&0x01 != 0 {
 		pos++
 	}
-	_, aw.err = aw.avif.Seek(pos, 0)
+	aw.seek(pos, 0)
+}
+
+// seek seeks the AVI file.
+func (aw *aviWriter) seek(offset int64, whence int) (pos int64) {
+	if aw.err != nil {
+		return
+	}
+	pos, aw.err = aw.avif.Seek(offset, whence)
+	return
 }
 
 // currentPos returns the current file position of the AVI file.
-func (aw *aviWriter) currentPos() (pos int64) {
-	pos, aw.err = aw.avif.Seek(0, 1) // Seek relative to current pos
-	return
+func (aw *aviWriter) currentPos() int64 {
+	return aw.seek(0, 1) // Seek relative to current pos
 }
 
 // AddFrame implements AviWriter.AddFrame().
@@ -322,7 +335,7 @@ func (aw *aviWriter) AddFrame(jpegData []byte) error {
 	framePos := aw.currentPos()
 	// Pointers in AVI are 32 bit. Do not write beyond that else the whole AVI file will be corrupted (not playable).
 	// Index entry size: 16 bytes (for each frame)
-	if framePos+int64(len(jpegData))+int64(aw.frames*16) > 4294000000 { // 2^32 = 4 294 967 296
+	if framePos+int64(len(jpegData))+int64(aw.frames*16) > 4200000000 { // 2^32 = 4 294 967 296
 		return ErrTooLarge
 	}
 
@@ -330,7 +343,9 @@ func (aw *aviWriter) AddFrame(jpegData []byte) error {
 
 	aw.writeInt32(0x63643030) // "00dc" compressed frame
 	aw.writeLengthField()     // Chunk length (nesting level 2)
-	_, aw.err = aw.avif.Write(jpegData)
+	if aw.err == nil {
+		_, aw.err = aw.avif.Write(jpegData)
+	}
 	aw.finalizeLengthField() // "00dc" chunk finished (nesting level 2)
 
 	// Write index data
@@ -355,15 +370,21 @@ func (aw *aviWriter) Close() (err error) {
 	// Write index
 	aw.writeStr("idx1") // idx1 chunk
 	var idxLength int64
-	idxLength, aw.err = aw.avif.Seek(0, 1) // Seek relative to current pos
-	aw.writeInt32(int32(idxLength))        // Chunk length (we know its size, no need to use writeLengthField() and finalizeLengthField() pair)
+	if aw.err == nil {
+		idxLength, aw.err = aw.idxf.Seek(0, 1) // Seek relative to current pos
+	}
+	aw.writeInt32(int32(idxLength)) // Chunk length (we know its size, no need to use writeLengthField() and finalizeLengthField() pair)
 	// Copy temporary index data
-	_, aw.err = aw.idxf.Seek(0, 0)
-	_, aw.err = io.Copy(aw.avif, aw.idxf)
+	if aw.err == nil {
+		_, aw.err = aw.idxf.Seek(0, 0)
+	}
+	if aw.err == nil {
+		_, aw.err = io.Copy(aw.avif, aw.idxf)
+	}
 
-	_, aw.err = aw.avif.Seek(aw.framesCountFieldPos, 0)
+	aw.seek(aw.framesCountFieldPos, 0)
 	aw.writeInt32(int32(aw.frames))
-	_, aw.err = aw.avif.Seek(aw.framesCountFieldPos2, 0)
+	aw.seek(aw.framesCountFieldPos2, 0)
 	aw.writeInt32(int32(aw.frames))
 
 	aw.finalizeLengthField() // 'RIFF' File finished (nesting level 0)
