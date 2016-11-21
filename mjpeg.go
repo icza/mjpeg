@@ -2,6 +2,26 @@
 
 Package mjpeg contains an MJPEG video format writer.
 
+Usage example:
+
+    checkErr := func(err error) {
+        if err != nil {
+            panic(err)
+        }
+    }
+
+    aw, err := mjpeg.New("test.avi", 200, 100, 2)
+    checkErr(err)
+
+    // Create a movie from images: 1.jpg, 2.jpg... 10.jpg
+    for i := 1; i <= 10; i++ {
+        data, err := ioutil.ReadFile(fmt.Sprintf("%d.jpg", i))
+        checkErr(err)
+        checkErr(aw.AddFrame(data))
+    }
+
+    checkErr(aw.Close())
+
 */
 package mjpeg
 
@@ -21,11 +41,8 @@ var (
 // AviWriter is an *.avi video writer.
 // The video codec is MJPEG.
 type AviWriter interface {
-	// AddJpegFile adds a frame from a JPEG file.
-	AddJpegFile(name string) error
-
-	// AddJpeg adds a frame from a JPEG encoded data slice.
-	AddJpeg(jpegData []byte) error
+	// AddFrame adds a frame from a JPEG encoded data slice.
+	AddFrame(jpegData []byte) error
 
 	// Close finalizes and closes the avi file.
 	Close() error
@@ -279,14 +296,8 @@ func (aw *aviWriter) currentPos() (pos int64) {
 	return
 }
 
-// AddJpegFile implements AviWriter.AddJpegFile().
-func (aw *aviWriter) AddJpegFile(name string) error {
-	// TODO
-	return nil
-}
-
-// AddJpeg implements AviWriter.AddJpeg().
-func (aw *aviWriter) AddJpeg(jpegData []byte) error {
+// AddFrame implements AviWriter.AddFrame().
+func (aw *aviWriter) AddFrame(jpegData []byte) error {
 	framePos := aw.currentPos()
 	// Pointers in AVI are 32 bit. Do not write beyond that else the whole AVI file will be corrupted (not playable).
 	// Index entry size: 16 bytes (for each frame)
