@@ -4,7 +4,7 @@
 
 MJPEG video writer implementation in Go.
 
-## Usage example
+## Examples
 
 Let's see an example how to turn the JPEG files `1.jpg`, `2.jpg`, ..., `10.jpg` into a movie file:
 
@@ -39,3 +39,5 @@ Example to add an `image.Image` as a frame to the video:
     buf := &bytes.Buffer{}
     checkErr(jpeg.Encode(buf, img, nil))
     checkErr(aw.AddFrame(buf.Bytes()))
+
+    checkErr(aw.Close())
