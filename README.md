@@ -1,6 +1,6 @@
 # mjpeg
 
-[![GoDoc](https://godoc.org/github.com/icza/mjpeg?status.svg)](https://godoc.org/github.com/icza/mjpeg) [![Build Status](https://travis-ci.org/icza/mjpeg.svg?branch=master)](https://travis-ci.org/icza/mjpeg) [![Go Report Card](https://goreportcard.com/badge/github.com/icza/minquery)](https://goreportcard.com/report/github.com/icza/minquery)
+[![GoDoc](https://godoc.org/github.com/icza/mjpeg?status.svg)](https://godoc.org/github.com/icza/mjpeg) [![Build Status](https://travis-ci.org/icza/mjpeg.svg?branch=master)](https://travis-ci.org/icza/mjpeg) [![Go Report Card](https://goreportcard.com/badge/github.com/icza/mjpeg)](https://goreportcard.com/report/github.com/icza/mjpeg)
 
 MJPEG video writer implementation in Go.
 
