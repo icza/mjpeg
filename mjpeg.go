@@ -2,7 +2,9 @@
 
 Package mjpeg contains an MJPEG video format writer.
 
-Usage example:
+Examples
+
+Let's see an example how to turn the JPEG files `1.jpg`, `2.jpg`, ..., `10.jpg` into a movie file:
 
     checkErr := func(err error) {
         if err != nil {
@@ -22,6 +24,19 @@ Usage example:
     }
 
     checkErr(aw.Close())
+
+Example to add an image.Image as a frame to the video:
+
+    aw, err := mjpeg.New("test.avi", 200, 100, 2)
+    checkErr(err)
+
+    var img image.Image
+    // Acquire / initialize image, e.g.:
+    // img = image.NewRGBA(image.Rect(0, 0, 200, 100))
+
+    buf := &bytes.Buffer{}
+    checkErr(jpeg.Encode(buf, img, nil))
+    checkErr(aw.AddFrame(buf.Bytes()))
 
 */
 package mjpeg
