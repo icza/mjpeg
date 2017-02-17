@@ -54,10 +54,10 @@ import (
 var (
 	// ErrTooLarge reports if more frames cannot be added,
 	// else the video file would get corrupted.
-	ErrTooLarge = errors.New("Video file too large!")
+	ErrTooLarge = errors.New("Video file too large")
 
 	// errImproperUse signals improper state (due to a previous error).
-	errImproperState = errors.New("Improper State!")
+	errImproperState = errors.New("Improper State")
 )
 
 // AviWriter is an *.avi video writer.
