@@ -382,10 +382,12 @@ func (aw *aviWriter) Close() (err error) {
 		_, aw.err = io.Copy(aw.avif, aw.idxf)
 	}
 
+	pos := aw.currentPos()
 	aw.seek(aw.framesCountFieldPos, 0)
 	aw.writeInt32(int32(aw.frames))
 	aw.seek(aw.framesCountFieldPos2, 0)
 	aw.writeInt32(int32(aw.frames))
+	aw.seek(pos, 0)
 
 	aw.finalizeLengthField() // 'RIFF' File finished (nesting level 0)
 
